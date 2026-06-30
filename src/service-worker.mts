@@ -222,7 +222,7 @@ export class REXGoogleAISpider extends REXSpider {
                                 if (conversation.started.value !== null) {
                                   const payload: EventPayload = {
                                     name: 'rex-conversation',
-                                    date: conversation.started.value.epochMilliseconds / 1000,
+                                    date: conversation.started.value.epochMilliseconds,
                                     ...conversation
                                   }
 
