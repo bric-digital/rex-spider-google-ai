@@ -72,7 +72,12 @@ export class REXGoogleAISpider extends REXSpider {
                     turns: [],
                     platform: 'google-ai-mode',
                     started: new DateString(chat[5][0]),
+                    ended: new DateString(chat[5][0]),
                     metadata: chat
+                  }
+
+                  if (chat[6] !== null) {
+                    conversation.ended = new DateString(chat[6][0])
                   }
 
                   parsed.push(conversation)
@@ -226,7 +231,13 @@ export class REXGoogleAISpider extends REXSpider {
                                     ...conversation
                                   }
 
-                                  const uploadKey = `rex-spider-google-ai-upload-${conversation.identifier}-${conversation.started.toJSON()}`
+                                  let when:DateString = conversation.started
+
+                                  if (conversation.ended !== undefined) {
+                                    when = conversation.ended
+                                  }
+
+                                  const uploadKey = `rex-spider-google-ai-upload-${conversation.identifier}-${when.toJSON()}`
 
                                   const fetchLastUpload = {
                                     messageType: 'fetchValue',
