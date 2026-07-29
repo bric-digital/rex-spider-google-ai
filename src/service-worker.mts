@@ -29,7 +29,7 @@ export class REXGoogleAISpider extends REXSpider {
     return 'https://www.google.com/'
   }
 
-  whitelistedUrls():string[] {
+  allowedUrls():string[] {
     return [
       '|https://www.google.com/|',
       '|https://www.google.com/httpservice/web/AimThreadsService/ListThreads?*',
