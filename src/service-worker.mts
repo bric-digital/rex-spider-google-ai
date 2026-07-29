@@ -136,7 +136,7 @@ export class REXGoogleAISpider extends REXSpider {
         if (!response.ok) {
           console.log(`[rex-spider-google-ai] List fetch failed (status ${response.status}).`)
           this.syncing = false
-          this.signalComplete(0)
+          this.signalComplete(-1)
           reject(`List fetch failed (status ${response.status}).`)
         } else {
           response.text().then((rawBody) => {
@@ -180,7 +180,7 @@ export class REXGoogleAISpider extends REXSpider {
 
           if (Date.now() < timestamp + this.syncPeriod) {
             console.log(`[rex-spider-google-ai] Too soon to sync again. Skipping this round...`)
-            this.signalComplete(0)
+            this.signalComplete(-1)
             resolve(true)
           } else {
             const storeMessage = {
@@ -202,7 +202,7 @@ export class REXGoogleAISpider extends REXSpider {
                   console.log(`[rex-spider-google-ai] Homepage fetch failed (status ${response.status}).`)
 
                   this.syncing = false
-                  this.signalComplete(0)
+                  this.signalComplete(-1)
 
                   resolve(true)
                 } else {
@@ -222,7 +222,7 @@ export class REXGoogleAISpider extends REXSpider {
 
                       if (this.accessToken === null) {
                         this.syncing = false
-                        this.signalComplete(0)
+                        this.signalComplete(-1)
 
                         resolve(true)
                       } else {
@@ -296,7 +296,7 @@ export class REXGoogleAISpider extends REXSpider {
                 console.error(err)
 
                 this.syncing = false
-                this.signalComplete(0)
+                this.signalComplete(-1)
 
                 resolve(true)
               })
@@ -338,7 +338,7 @@ export class REXGoogleAISpider extends REXSpider {
         } else {
             if (Date.now() < lastSynchTs + this.syncPeriod) {
               console.log(`[rex-spider-google-ai] Too soon to sync again. Skipping this round...`)
-              this.signalComplete(0)
+              this.signalComplete(-1)
 
               resolve({
                 sitesCrawled: [this.identifier()],
@@ -367,7 +367,7 @@ export class REXGoogleAISpider extends REXSpider {
                     console.log(`[rex-spider-google-ai] Homepage fetch failed (status ${response.status}).`)
 
                     this.syncing = false
-                    this.signalComplete(0)
+                    this.signalComplete(-1)
 
                     resolve({
                       sitesCrawled: [this.identifier()],
@@ -393,7 +393,7 @@ export class REXGoogleAISpider extends REXSpider {
 
                         if (this.accessToken === null) {
                           this.syncing = false
-                          this.signalComplete(0)
+                          this.signalComplete(-1)
 
                           resolve({
                             sitesCrawled: [this.identifier()],
@@ -478,7 +478,7 @@ export class REXGoogleAISpider extends REXSpider {
                   console.error(err)
 
                   this.syncing = false
-                  this.signalComplete(0)
+                  this.signalComplete(-1)
 
                   resolve({
                     sitesCrawled: [this.identifier()],
