@@ -106,13 +106,14 @@ export class REXGoogleAISpider extends REXSpider {
     return parsed
   }
 
-  private signalComplete(crawledCount: number) {
+  private signalComplete(crawledCount: number, crawledIds:string[] = []) {
     setTimeout(() => {
       dispatchEvent({
         name: 'pdk-app-event',
         event_name: 'rex-spider-google-ai-complete',
         event_details: {
           crawled_count: crawledCount,
+          crawled_ids: crawledIds,
           date: Date.now()
         }
       })
@@ -175,6 +176,8 @@ export class REXGoogleAISpider extends REXSpider {
             timestamp = response
           }
 
+          const crawledIds:string[] = []
+
           if (Date.now() < timestamp + this.syncPeriod) {
             console.log(`[rex-spider-google-ai] Too soon to sync again. Skipping this round...`)
             this.signalComplete(0)
@@ -229,7 +232,7 @@ export class REXGoogleAISpider extends REXSpider {
                           const uploadConversations = () => {
                             if (chatList.length <= 0) {
                               this.syncing = false
-                              this.signalComplete(dispatched)
+                              this.signalComplete(dispatched, crawledIds)
                               resolve(false)
                             } else {
                               const conversation = chatList.pop()
@@ -247,6 +250,8 @@ export class REXGoogleAISpider extends REXSpider {
                                   if (conversation.ended !== undefined) {
                                     when = conversation.ended
                                   }
+
+                                  crawledIds.push(conversation.identifier)
 
                                   const uploadKey = `rex-spider-google-ai-upload-${conversation.identifier}-${when.toJSON()}`
 
@@ -302,171 +307,64 @@ export class REXGoogleAISpider extends REXSpider {
     })
   }
 
-    doBackgroundCrawl():Promise<REXSpiderCrawlResult> {
-      return new Promise<REXSpiderCrawlResult>((resolve) => {
-        const fetchLastSync = {
-          messageType: 'fetchValue',
-          key: 'rex-spider-google-ai-last-sync'
+  doBackgroundCrawl():Promise<REXSpiderCrawlResult> {
+    return new Promise<REXSpiderCrawlResult>((resolve) => {
+      const fetchLastSync = {
+        messageType: 'fetchValue',
+        key: 'rex-spider-google-ai-last-sync'
+      }
+
+      rexCorePlugin.handleMessage(fetchLastSync, this, (response) => {
+        let lastSynchTs = 0
+
+        if (response !== null) {
+          lastSynchTs = response
         }
 
-        rexCorePlugin.handleMessage(fetchLastSync, this, (response) => {
-          let lastSynchTs = 0
+        const when:Date = new Date(lastSynchTs)
 
-          if (response !== null) {
-            lastSynchTs = response
-          }
+        const crawledIds:string[] = []
 
-          const when:Date = new Date(lastSynchTs)
+        if (this.syncing) {
+          console.log(`[rex-spider-google-ai] Still syncing. Skipping this round...`)
 
-          if (this.syncing) {
-            console.log(`[rex-spider-google-ai] Still syncing. Skipping this round...`)
+          resolve({
+            sitesCrawled: [this.identifier()],
+            issues: [{
+              url: this.loginUrl(),
+              message: `Still synching since ${when}.`
+            }]
+          })
+        } else {
+            if (Date.now() < lastSynchTs + this.syncPeriod) {
+              console.log(`[rex-spider-google-ai] Too soon to sync again. Skipping this round...`)
+              this.signalComplete(0)
 
-            resolve({
-              sitesCrawled: [this.identifier()],
-              issues: [{
-                url: this.loginUrl(),
-                message: `Still synching since ${when}.`
-              }]
-            })
-          } else {
-              if (Date.now() < lastSynchTs + this.syncPeriod) {
-                console.log(`[rex-spider-google-ai] Too soon to sync again. Skipping this round...`)
-                this.signalComplete(0)
+              resolve({
+                sitesCrawled: [this.identifier()],
+                issues: [{
+                  url: this.loginUrl(),
+                  message: `Too soon to synch since ${when} (period = ${this.syncPeriod}).`
+                }]
+              })
+            } else {
+              const storeMessage = {
+                messageType: 'storeValue',
+                key: 'rex-spider-google-ai-last-sync',
+                value: Date.now()
+              }
 
-                resolve({
-                  sitesCrawled: [this.identifier()],
-                  issues: [{
-                    url: this.loginUrl(),
-                    message: `Too soon to synch since ${when} (period = ${this.syncPeriod}).`
-                  }]
-                })
-              } else {
-                const storeMessage = {
-                  messageType: 'storeValue',
-                  key: 'rex-spider-google-ai-last-sync',
-                  value: Date.now()
-                }
+              rexCorePlugin.handleMessage(storeMessage, this, (response) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+                this.syncing = true
 
-                rexCorePlugin.handleMessage(storeMessage, this, (response) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-                  this.syncing = true
+                const homeUrl = 'https://www.google.com/'
 
-                  const homeUrl = 'https://www.google.com/'
-
-                  fetch(homeUrl, {
-                    method: 'GET',
-                    credentials: 'include', // Crucial property to send cookies
-                  }).then((response: Response) => {
-                    if (!response.ok) {
-                      console.log(`[rex-spider-google-ai] Homepage fetch failed (status ${response.status}).`)
-
-                      this.syncing = false
-                      this.signalComplete(0)
-
-                      resolve({
-                        sitesCrawled: [this.identifier()],
-                        issues: [{
-                          url: this.loginUrl(),
-                          message: `Unable to fetch ${homeUrl}. Status code = ${response.status}.`
-                        }]
-                      })
-                    } else {
-                      response.text().then((rawHtml) => {
-                        if (rawHtml.includes('"SNlM0e":"')) {
-                          const startIndex = rawHtml.indexOf('"SNlM0e":"')
-
-                          if (startIndex !== -1) {
-                            const prefixStripped = rawHtml.substring(startIndex)
-
-                            const tokens = prefixStripped.split('"')
-
-                            if (tokens.length > 3) {
-                              this.accessToken = tokens[3]
-                            }
-                          }
-
-                          if (this.accessToken === null) {
-                            this.syncing = false
-                            this.signalComplete(0)
-
-                            resolve({
-                              sitesCrawled: [this.identifier()],
-                              issues: [{
-                                url: this.loginUrl(),
-                                message: `User not logged in.`
-                              }]
-                            })
-                          } else {
-                            this.fetchChats().then((chatList:Conversation[]) => {
-                              let dispatched = 0
-
-                              const uploadConversations = () => {
-                                if (chatList.length <= 0) {
-                                  this.syncing = false
-                                  this.signalComplete(dispatched)
-
-                                  resolve({
-                                    sitesCrawled: [this.identifier()],
-                                    issues: []
-                                  })
-
-                                } else {
-                                  const conversation = chatList.pop()
-
-                                  if (conversation !== undefined) {
-                                    if (conversation.started.value !== null) {
-                                      const payload: EventPayload = {
-                                        name: 'rex-conversation',
-                                        date: conversation.started.value.epochMilliseconds,
-                                        ...conversation
-                                      }
-
-                                      let when:DateString = conversation.started
-
-                                      if (conversation.ended !== undefined) {
-                                        when = conversation.ended
-                                      }
-
-                                      const uploadKey = `rex-spider-google-ai-upload-${conversation.identifier}-${when.toJSON()}`
-
-                                      const fetchLastUpload = {
-                                        messageType: 'fetchValue',
-                                        key: uploadKey
-                                      }
-
-                                      rexCorePlugin.handleMessage(fetchLastUpload, this, (uploadValue) => {
-                                        if (uploadValue === null) {
-                                          dispatchEvent(payload)
-
-                                          dispatched += 1
-
-                                          const storeUpload = {
-                                            messageType: 'storeValue',
-                                            key: uploadKey,
-                                            value: Date.now()
-                                          }
-
-                                          rexCorePlugin.handleMessage(storeUpload, this, (response) => { // eslint-disable-line @typescript-eslint/no-unused-vars
-                                            uploadConversations()
-                                          })
-                                        } else {
-                                          uploadConversations()
-                                        }
-                                      })
-                                    }
-                                  }
-                                }
-                              }
-
-                              uploadConversations()
-                            })
-                          }
-                        }
-                      })
-                    }
-                  })
-                  .catch((err) => {
-                    console.error(`[rex-spider-google-ai] Error encountered fetching conversations:`)
-                    console.error(err)
+                fetch(homeUrl, {
+                  method: 'GET',
+                  credentials: 'include', // Crucial property to send cookies
+                }).then((response: Response) => {
+                  if (!response.ok) {
+                    console.log(`[rex-spider-google-ai] Homepage fetch failed (status ${response.status}).`)
 
                     this.syncing = false
                     this.signalComplete(0)
@@ -475,16 +373,127 @@ export class REXGoogleAISpider extends REXSpider {
                       sitesCrawled: [this.identifier()],
                       issues: [{
                         url: this.loginUrl(),
-                        message: `Error fetching conversations: ${err}.`
+                        message: `Unable to fetch ${homeUrl}. Status code = ${response.status}.`
                       }]
                     })
+                  } else {
+                    response.text().then((rawHtml) => {
+                      if (rawHtml.includes('"SNlM0e":"')) {
+                        const startIndex = rawHtml.indexOf('"SNlM0e":"')
+
+                        if (startIndex !== -1) {
+                          const prefixStripped = rawHtml.substring(startIndex)
+
+                          const tokens = prefixStripped.split('"')
+
+                          if (tokens.length > 3) {
+                            this.accessToken = tokens[3]
+                          }
+                        }
+
+                        if (this.accessToken === null) {
+                          this.syncing = false
+                          this.signalComplete(0)
+
+                          resolve({
+                            sitesCrawled: [this.identifier()],
+                            issues: [{
+                              url: this.loginUrl(),
+                              message: `User not logged in.`
+                            }]
+                          })
+                        } else {
+                          this.fetchChats().then((chatList:Conversation[]) => {
+                            let dispatched = 0
+
+                            const uploadConversations = () => {
+                              if (chatList.length <= 0) {
+                                this.syncing = false
+                                this.signalComplete(dispatched, crawledIds)
+
+                                resolve({
+                                  sitesCrawled: [this.identifier()],
+                                  issues: []
+                                })
+
+                              } else {
+                                const conversation = chatList.pop()
+
+                                if (conversation !== undefined) {
+                                  if (conversation.started.value !== null) {
+                                    const payload: EventPayload = {
+                                      name: 'rex-conversation',
+                                      date: conversation.started.value.epochMilliseconds,
+                                      ...conversation
+                                    }
+
+                                    let when:DateString = conversation.started
+
+                                    if (conversation.ended !== undefined) {
+                                      when = conversation.ended
+                                    }
+
+                                    crawledIds.push(conversation.identifier)
+
+                                    const uploadKey = `rex-spider-google-ai-upload-${conversation.identifier}-${when.toJSON()}`
+
+                                    const fetchLastUpload = {
+                                      messageType: 'fetchValue',
+                                      key: uploadKey
+                                    }
+
+                                    rexCorePlugin.handleMessage(fetchLastUpload, this, (uploadValue) => {
+                                      if (uploadValue === null) {
+                                        dispatchEvent(payload)
+
+                                        dispatched += 1
+
+                                        const storeUpload = {
+                                          messageType: 'storeValue',
+                                          key: uploadKey,
+                                          value: Date.now()
+                                        }
+
+                                        rexCorePlugin.handleMessage(storeUpload, this, (response) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+                                          uploadConversations()
+                                        })
+                                      } else {
+                                        uploadConversations()
+                                      }
+                                    })
+                                  }
+                                }
+                              }
+                            }
+
+                            uploadConversations()
+                          })
+                        }
+                      }
+                    })
+                  }
+                })
+                .catch((err) => {
+                  console.error(`[rex-spider-google-ai] Error encountered fetching conversations:`)
+                  console.error(err)
+
+                  this.syncing = false
+                  this.signalComplete(0)
+
+                  resolve({
+                    sitesCrawled: [this.identifier()],
+                    issues: [{
+                      url: this.loginUrl(),
+                      message: `Error fetching conversations: ${err}.`
+                    }]
                   })
                 })
-              }
+              })
             }
-        })
+          }
       })
-    }
+    })
+  }
 
 }
 
