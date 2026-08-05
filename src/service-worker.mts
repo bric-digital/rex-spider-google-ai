@@ -72,9 +72,6 @@ export class REXGoogleAISpider extends REXSpider {
           if (line.startsWith('[[')) {
             const parsedLine = JSON.parse(line)
 
-            console.log('parsedLine')
-            console.log(parsedLine)
-
             for (const message of parsedLine) {
               if (check.array(message)) {
                 for (const chat of message) {
@@ -287,6 +284,13 @@ export class REXGoogleAISpider extends REXSpider {
                           uploadConversations()
                         })
                       }
+                    } else {
+                      console.log(`[rex-google-ai] Failed to locate access token on homepage page.`)
+
+                      this.syncing = false
+                      this.signalComplete(-1)
+
+                      resolve(true)
                     }
                   })
                 }
