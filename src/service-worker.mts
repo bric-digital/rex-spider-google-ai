@@ -120,7 +120,6 @@ export class REXGoogleAISpider extends REXSpider {
     }, 1100)
   }
 
-
   fetchChats(): Promise<Conversation[]> {
     return new Promise<Conversation[]>((resolve, reject) => {
       const requestId = Math.floor(Math.random() * (999999 - 10000)) + 10000
@@ -140,10 +139,11 @@ export class REXGoogleAISpider extends REXSpider {
           reject(`List fetch failed (status ${response.status}).`)
         } else {
           response.text().then((rawBody) => {
-            console.log('rawBody')
-            console.log(rawBody)
+            console.log(`[rex-spider-google-ai] rawBody: ${rawBody}`)
 
             const parsed = this.parseChatList(rawBody)
+
+            console.log(`[rex-spider-google-ai] parsed: ${parsed.length}`)
 
             if (parsed !== null) {
               for (const chat of parsed) {
@@ -469,6 +469,18 @@ export class REXGoogleAISpider extends REXSpider {
                             uploadConversations()
                           })
                         }
+                      } else {
+                          this.syncing = false
+                          this.signalComplete(-1)
+
+                          resolve({
+                            sitesCrawled: [this.identifier()],
+                            issues: [{
+                              url: this.loginUrl(),
+                              message: `SNlM0e token not found in Google home page.`
+                            }]
+                          })
+
                       }
                     })
                   }
