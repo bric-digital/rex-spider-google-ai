@@ -4,7 +4,7 @@ import { Conversation, DateString } from '@bric/rex-types/types'
 
 import { EventPayload, dispatchEvent } from '@bric/rex-core/service-worker'
 
-import rexSpiderPlugin, { REXSpider, REXSpiderCrawlResult } from '@bric/rex-spider/service-worker'
+import rexSpiderPlugin, { REXSpider, REXSpiderCrawlResult, REXSpiderCrawlInspection } from '@bric/rex-spider/service-worker'
 
 export class REXGoogleAISpider extends REXSpider {
   accessToken: string | null = null
@@ -99,13 +99,13 @@ export class REXGoogleAISpider extends REXSpider {
     return parsed
   }
 
-  fetchChats(): Promise<Conversation[]> {
-    return new Promise<Conversation[]>((resolve, reject) => {
+  fetchChats(): Promise<REXSpiderCrawlInspection[]> {
+    return new Promise<REXSpiderCrawlInspection[]>((resolve, reject) => {
       const requestId = Math.floor(Math.random() * (999999 - 10000)) + 10000
 
       const chatsUrl = `https://www.google.com/httpservice/web/AimThreadsService/ListThreads?hl=en&reqpld=[null,null,0]&msc=gwsclient&opi=${requestId}`
 
-      const chats:Conversation[] = []
+      const chats:REXSpiderCrawlInspection[] = []
 
       fetch(chatsUrl, {
         method: 'GET',
@@ -117,17 +117,41 @@ export class REXGoogleAISpider extends REXSpider {
           response.text().then((rawBody) => {
             console.log(`[rex-spider-google-ai] rawBody: ${rawBody}`)
 
-            const parsed = this.parseChatList(rawBody)
+            const parsed:Conversation[] = this.parseChatList(rawBody)
 
-            console.log(`[rex-spider-google-ai] parsed: ${parsed.length}`)
+            const checkNextConversation = () => {
+              if (parsed.length === 0) {
+                resolve(chats)
+              } else {
+                const nextConversation = parsed.pop()
 
-            if (parsed !== null) {
-              for (const chat of parsed) {
-                chats.push(chat)
+                if (nextConversation !== undefined && nextConversation.ended !== undefined) {
+                  const uploadKey = `rex-spider-google-ai-upload-${nextConversation.identifier}-${nextConversation.ended.toJSON()}`
+
+                  this.checkIfAlreadyTransmitted(uploadKey).then((transmitted:boolean) => {
+                    if (transmitted) {
+                      chats.push({
+                        id: nextConversation.identifier,
+                        refresh: false,
+                        conversation: nextConversation
+                      })
+                    } else {
+                      chats.push({
+                        id: nextConversation.identifier,
+                        refresh: true,
+                        conversation: nextConversation
+                      })
+                    }
+
+                    checkNextConversation()
+                })
+                } else {
+                  checkNextConversation()
+                }
               }
             }
 
-            resolve(chats)
+            checkNextConversation()
           })
         }
       })
@@ -180,7 +204,7 @@ export class REXGoogleAISpider extends REXSpider {
                   }]
                 })
               } else {
-                this.fetchChats().then((chatList:Conversation[]) => {
+                this.fetchChats().then((chatList:REXSpiderCrawlInspection[]) => {
                   let dispatched = 0
 
                   const uploadConversations = () => {
@@ -193,17 +217,19 @@ export class REXGoogleAISpider extends REXSpider {
                       })
 
                     } else {
-                      const conversation = chatList.pop()
+                      const inspectionRecord:REXSpiderCrawlInspection | undefined= chatList.pop()
 
-                      if (conversation !== undefined) {
-                        if (conversation.started.value !== null) {
+                      if (inspectionRecord !== undefined && inspectionRecord.conversation !== undefined) {
+                        const conversation:Conversation = inspectionRecord.conversation
+
+                        if (conversation.ended !== undefined && conversation.ended.value !== null) {
                           const payload: EventPayload = {
                             name: 'rex-conversation',
-                            date: conversation.started.value.epochMilliseconds,
+                            date: conversation.ended.value.epochMilliseconds,
                             ...conversation
                           }
 
-                          let when:DateString = conversation.started
+                          let when:DateString | undefined = conversation.started
 
                           if (conversation.ended !== undefined) {
                             when = conversation.ended
@@ -211,19 +237,29 @@ export class REXGoogleAISpider extends REXSpider {
 
                           crawledIds.push(conversation.identifier)
 
-                          const uploadKey = `rex-spider-google-ai-upload-${conversation.identifier}-${when.toJSON()}`
+                          if (when !== undefined) {
+                            if (inspectionRecord.refresh) {
+                              const uploadKey = `rex-spider-google-ai-upload-${conversation.identifier}-${when.toJSON()}`
 
-                          this.checkIfAlreadyTransmitted(uploadKey).then((transmitted:boolean) => {
-                            if (transmitted === false) {
-                              dispatchEvent(payload)
+                              this.checkIfAlreadyTransmitted(uploadKey).then((transmitted:boolean) => { // Possibly redundant
+                                if (transmitted === false) {
+                                  dispatchEvent(payload)
 
-                              dispatched += 1
+                                  dispatched += 1
 
-                              this.logTransmitted(uploadKey).then(() => {
-                                uploadConversations()
+                                  this.logTransmitted(uploadKey).then(() => {
+                                    uploadConversations()
+                                  })
+                                } else {
+                                  uploadConversations()
+                                }
                               })
+                            } else {
+                              uploadConversations()
                             }
-                          })
+                          } else {
+                            uploadConversations()
+                          }
                         }
                       } else {
                         uploadConversations()
