@@ -166,140 +166,133 @@ export class REXGoogleAISpider extends REXSpider {
 
   doBackgroundCrawl():Promise<REXSpiderCrawlResult> {
     return new Promise<REXSpiderCrawlResult>((resolve) => {
-      const homeUrl = 'https://www.google.com/'
+      super.doBackgroundCrawl().then((crawlResult:REXSpiderCrawlResult) => {
+        const homeUrl = 'https://www.google.com/'
 
-      const crawledIds:string[] = []
+        const crawledIds:string[] = []
 
-      fetch(homeUrl, {
-        method: 'GET',
-        credentials: 'include', // Crucial property to send cookies
-      }).then((response: Response) => {
-        if (!response.ok) {
-          this.signalCrawlComplete(-1, [], `Unable to fetch ${homeUrl}. Status code = ${response.status}.`)
+        fetch(homeUrl, {
+          method: 'GET',
+          credentials: 'include', // Crucial property to send cookies
+        }).then((response: Response) => {
+          if (!response.ok) {
+            this.signalCrawlComplete(-1, [], `Unable to fetch ${homeUrl}. Status code = ${response.status}.`)
 
-          resolve({
-            sitesCrawled: [this.identifier()],
-            issues: [{
+            crawlResult.issues.push({
               url: this.loginUrl(),
               message: `Unable to fetch ${homeUrl}. Status code = ${response.status}.`
-            }]
-          })
-        } else {
-          response.text().then((rawHtml) => {
-            if (rawHtml.includes('"SNlM0e":"')) {
-              const startIndex = rawHtml.indexOf('"SNlM0e":"')
+            })
 
-              if (startIndex !== -1) {
-                const prefixStripped = rawHtml.substring(startIndex)
+            resolve(crawlResult)
+          } else {
+            response.text().then((rawHtml) => {
+              if (rawHtml.includes('"SNlM0e":"')) {
+                const startIndex = rawHtml.indexOf('"SNlM0e":"')
 
-                const tokens = prefixStripped.split('"')
+                if (startIndex !== -1) {
+                  const prefixStripped = rawHtml.substring(startIndex)
 
-                if (tokens.length > 3) {
-                  this.accessToken = tokens[3]
+                  const tokens = prefixStripped.split('"')
+
+                  if (tokens.length > 3) {
+                    this.accessToken = tokens[3]
+                  }
                 }
-              }
 
-              if (this.accessToken === null) {
-                this.signalCrawlComplete(-1, [], `User not logged in.`)
+                if (this.accessToken === null) {
+                  this.signalCrawlComplete(-1, [], `User not logged in.`)
 
-                resolve({
-                  sitesCrawled: [this.identifier()],
-                  issues: [{
+                  crawlResult.issues.push({
                     url: this.loginUrl(),
                     message: `User not logged in.`
-                  }]
-                })
-              } else {
-                this.fetchChats().then((chatList:REXSpiderCrawlInspection[]) => {
-                  let dispatched = 0
+                  })
 
-                  const uploadConversations = () => {
-                    if (chatList.length <= 0) {
-                      this.signalCrawlComplete(dispatched, crawledIds, 'Crawl successful')
+                  resolve(crawlResult)
+                } else {
+                  this.fetchChats().then((chatList:REXSpiderCrawlInspection[]) => {
+                    let dispatched = 0
 
-                      resolve({
-                        sitesCrawled: [this.identifier()],
-                        issues: []
-                      })
+                    const uploadConversations = () => {
+                      if (chatList.length <= 0) {
+                        this.signalCrawlComplete(dispatched, crawledIds, 'Crawl successful')
 
-                    } else {
-                      const inspectionRecord:REXSpiderCrawlInspection | undefined= chatList.pop()
+                        resolve(crawlResult)
+                      } else {
+                        const inspectionRecord:REXSpiderCrawlInspection | undefined= chatList.pop()
 
-                      if (inspectionRecord !== undefined && inspectionRecord.conversation !== undefined) {
-                        const conversation:Conversation = inspectionRecord.conversation
+                        if (inspectionRecord !== undefined && inspectionRecord.conversation !== undefined) {
+                          const conversation:Conversation = inspectionRecord.conversation
 
-                        if (conversation.ended !== undefined && conversation.ended.value !== null) {
-                          const payload: EventPayload = {
-                            name: 'rex-conversation',
-                            date: conversation.ended.value.epochMilliseconds,
-                            ...conversation
-                          }
+                          if (conversation.ended !== undefined && conversation.ended.value !== null) {
+                            const payload: EventPayload = {
+                              name: 'rex-conversation',
+                              date: conversation.ended.value.epochMilliseconds,
+                              ...conversation
+                            }
 
-                          let when:DateString | undefined = conversation.started
+                            let when:DateString | undefined = conversation.started
 
-                          if (conversation.ended !== undefined) {
-                            when = conversation.ended
-                          }
+                            if (conversation.ended !== undefined) {
+                              when = conversation.ended
+                            }
 
-                          crawledIds.push(conversation.identifier)
+                            crawledIds.push(conversation.identifier)
 
-                          if (when !== undefined) {
-                            if (inspectionRecord.refresh) {
-                              const uploadKey = `rex-spider-google-ai-upload-${conversation.identifier}-${when.toJSON()}`
+                            if (when !== undefined) {
+                              if (inspectionRecord.refresh) {
+                                const uploadKey = `rex-spider-google-ai-upload-${conversation.identifier}-${when.toJSON()}`
 
-                              this.checkIfAlreadyTransmitted(uploadKey).then((transmitted:boolean) => { // Possibly redundant
-                                if (transmitted === false) {
-                                  dispatchEvent(payload)
+                                this.checkIfAlreadyTransmitted(uploadKey).then((transmitted:boolean) => { // Possibly redundant
+                                  if (transmitted === false) {
+                                    dispatchEvent(payload)
 
-                                  dispatched += 1
+                                    dispatched += 1
 
-                                  this.logTransmitted(uploadKey).then(() => {
+                                    this.logTransmitted(uploadKey).then(() => {
+                                      uploadConversations()
+                                    })
+                                  } else {
                                     uploadConversations()
-                                  })
-                                } else {
-                                  uploadConversations()
-                                }
-                              })
+                                  }
+                                })
+                              } else {
+                                uploadConversations()
+                              }
                             } else {
                               uploadConversations()
                             }
-                          } else {
-                            uploadConversations()
                           }
+                        } else {
+                          uploadConversations()
                         }
-                      } else {
-                        uploadConversations()
                       }
                     }
-                  }
 
-                  uploadConversations()
-                })
-              }
-            } else {
+                    uploadConversations()
+                  })
+                }
+              } else {
                 this.signalCrawlComplete(-1, [], `SNlM0e token not found in Google home page.`)
 
-                resolve({
-                  sitesCrawled: [this.identifier()],
-                  issues: [{
-                    url: this.loginUrl(),
-                    message: `SNlM0e token not found in Google home page.`
-                  }]
+                crawlResult.issues.push({
+                  url: this.loginUrl(),
+                  message: `SNlM0e token not found in Google home page.`
                 })
 
-            }
-          })
-        }
-      })
-      .catch((err) => {
-        this.signalCrawlComplete(-1, [], `Error fetching conversations: ${err}.`)
+                resolve(crawlResult)
+              }
+            })
+          }
+        })
+        .catch((err) => {
+          this.signalCrawlComplete(-1, [], `Error fetching conversations: ${err}.`)
 
-        resolve({
-          sitesCrawled: [this.identifier()],
-          issues: [{
+          crawlResult.issues.push({
             url: this.loginUrl(),
             message: `Error fetching conversations: ${err}.`
-          }]
+          })
+
+          resolve(crawlResult)
         })
       })
     })
