@@ -126,25 +126,31 @@ export class REXGoogleAISpider extends REXSpider {
                 const nextConversation = parsed.pop()
 
                 if (nextConversation !== undefined && nextConversation.ended !== undefined) {
-                  const uploadKey = `rex-spider-google-ai-upload-${nextConversation.identifier}-${nextConversation.ended.toJSON()}`
+                  this.crawlWindowContains(nextConversation.ended.timestamp()).then((include) => {
+                    if (nextConversation.ended !== undefined && include) {
+                      const uploadKey = `rex-spider-google-ai-upload-${nextConversation.identifier}-${nextConversation.ended.toJSON()}`
 
-                  this.checkIfAlreadyTransmitted(uploadKey).then((transmitted:boolean) => {
-                    if (transmitted) {
-                      chats.push({
-                        id: nextConversation.identifier,
-                        refresh: false,
-                        conversation: nextConversation
+                      this.checkIfAlreadyTransmitted(uploadKey).then((transmitted:boolean) => {
+                        if (transmitted) {
+                          chats.push({
+                            id: nextConversation.identifier,
+                            refresh: false,
+                            conversation: nextConversation
+                          })
+                        } else {
+                          chats.push({
+                            id: nextConversation.identifier,
+                            refresh: true,
+                            conversation: nextConversation
+                          })
+                        }
+
+                        checkNextConversation()
                       })
                     } else {
-                      chats.push({
-                        id: nextConversation.identifier,
-                        refresh: true,
-                        conversation: nextConversation
-                      })
+                      checkNextConversation()
                     }
-
-                    checkNextConversation()
-                })
+                  })
                 } else {
                   checkNextConversation()
                 }
