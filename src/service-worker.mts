@@ -128,21 +128,23 @@ export class REXGoogleAISpider extends REXSpider {
                 if (nextConversation !== undefined && nextConversation.ended !== undefined) {
                   this.crawlWindowContains(nextConversation.ended.timestamp()).then((include) => {
                     if (nextConversation.ended !== undefined && include) {
-                      const uploadKey = `rex-spider-google-ai-upload-${nextConversation.identifier}-${nextConversation.ended.toJSON()}`
-
-                      this.checkIfAlreadyTransmitted(uploadKey).then((transmitted:boolean) => {
-                        if (transmitted) {
-                          chats.push({
-                            id: nextConversation.identifier,
-                            refresh: false,
-                            conversation: nextConversation
-                          })
-                        } else {
-                          chats.push({
-                            id: nextConversation.identifier,
-                            refresh: true,
-                            conversation: nextConversation
-                          })
+                      this.checkIfAlreadyTransmitted(nextConversation.identifier, nextConversation.ended).then((transmitted:boolean) => {
+                        if (nextConversation.ended !== undefined) {
+                          if (transmitted) {
+                            chats.push({
+                              id: nextConversation.identifier,
+                              refresh: false,
+                              conversation: nextConversation,
+                              lookupDate: nextConversation.ended
+                            })
+                          } else {
+                            chats.push({
+                              id: nextConversation.identifier,
+                              refresh: true,
+                              conversation: nextConversation,
+                              lookupDate: nextConversation.ended
+                            })
+                          }
                         }
 
                         checkNextConversation()
@@ -240,15 +242,13 @@ export class REXGoogleAISpider extends REXSpider {
 
                             if (when !== undefined) {
                               if (inspectionRecord.refresh) {
-                                const uploadKey = `rex-spider-google-ai-upload-${conversation.identifier}-${when.toJSON()}`
-
-                                this.checkIfAlreadyTransmitted(uploadKey).then((transmitted:boolean) => { // Possibly redundant
+                                this.checkIfAlreadyTransmitted(inspectionRecord.id, inspectionRecord.lookupDate).then((transmitted:boolean) => { // Possibly redundant
                                   if (transmitted === false) {
                                     dispatchEvent(payload)
 
                                     dispatched += 1
 
-                                    this.logTransmitted(uploadKey).then(() => {
+                                    this.logTransmitted(inspectionRecord.id, inspectionRecord.lookupDate).then(() => {
                                       uploadConversations()
                                     })
                                   } else {
