@@ -28,7 +28,7 @@ export class REXGoogleAISpider extends REXSpider {
   allowedUrls():string[] {
     return [
       '^https://www.google.com/$',
-      '^https://www.google.com/httpservice/web/AimThreadsService/ListThreads\?.*',
+      '^https://www.google.com/httpservice/web/AimThreadsService/ListThreads\\?.*',
     ]
   }
 
