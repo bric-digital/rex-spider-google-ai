@@ -1,6 +1,6 @@
 import check from 'check-types'
 
-import { Conversation, DateString } from '@bric/rex-types/types'
+import { Conversation, DateString, REXStackOperator } from '@bric/rex-types/types'
 
 import { EventPayload, dispatchEvent } from '@bric/rex-core/service-worker'
 
@@ -90,10 +90,16 @@ export class REXGoogleAISpider extends REXSpider {
             }
           }
         }
+      } else {
+        console.error(`[rex-spider-google-ai] Error parsing conversation: malformed HTTP response: ${rawChatListData}`)
+
+        throw(`Error parsing conversation: malformed HTTP response: ${rawChatListData}`)
       }
     } catch (err) {
       console.error(`[rex-spider-google-ai] Error parsing conversation:`)
       console.error(err)
+
+      throw(err)
     }
 
     return parsed
@@ -117,49 +123,57 @@ export class REXGoogleAISpider extends REXSpider {
           response.text().then((rawBody) => {
             console.log(`[rex-spider-google-ai] rawBody: ${rawBody}`)
 
-            const parsed:Conversation[] = this.parseChatList(rawBody)
+            try {
+              const conversations:REXStackOperator<Conversation> = new REXStackOperator<Conversation>()
 
-            const checkNextConversation = () => {
-              if (parsed.length === 0) {
-                resolve(chats)
-              } else {
-                const nextConversation = parsed.pop()
+              const parsed:Conversation[] = this.parseChatList(rawBody)
 
-                if (nextConversation !== undefined && nextConversation.ended !== undefined) {
-                  this.crawlWindowContains(nextConversation.ended.timestamp()).then((include) => {
-                    if (nextConversation.ended !== undefined && include) {
-                      this.checkIfAlreadyTransmitted(nextConversation.identifier, nextConversation.ended).then((transmitted:boolean) => {
-                        if (nextConversation.ended !== undefined) {
-                          if (transmitted) {
-                            chats.push({
-                              id: nextConversation.identifier,
-                              refresh: false,
-                              conversation: nextConversation,
-                              lookupDate: nextConversation.ended
-                            })
-                          } else {
-                            chats.push({
-                              id: nextConversation.identifier,
-                              refresh: true,
-                              conversation: nextConversation,
-                              lookupDate: nextConversation.ended
-                            })
+              conversations.push(...parsed)
+
+              conversations.run((conversation:Conversation):Promise<void> => {
+                return new Promise<void>((conversationResolve) => {
+                  if (conversation.ended !== undefined) {
+                    this.crawlWindowContains(conversation.ended.timestamp()).then((include) => {
+                      if (conversation.ended !== undefined && include) {
+                        this.checkIfAlreadyTransmitted(conversation.identifier, conversation.ended).then((transmitted:boolean) => {
+                          if (conversation.ended !== undefined) {
+                            if (transmitted) {
+                              chats.push({
+                                id: conversation.identifier,
+                                refresh: false,
+                                conversation: conversation,
+                                lookupDate: conversation.ended
+                              })
+                            } else {
+                              chats.push({
+                                id: conversation.identifier,
+                                refresh: true,
+                                conversation: conversation,
+                                lookupDate: conversation.ended
+                              })
+                            }
                           }
-                        }
 
-                        checkNextConversation()
-                      })
-                    } else {
-                      checkNextConversation()
-                    }
-                  })
-                } else {
-                  checkNextConversation()
-                }
-              }
+                          conversationResolve()
+                        })
+                      } else {
+                        conversationResolve()
+                      }
+                    })
+                  } else {
+                    conversationResolve()
+                  }
+                })
+              })
+              .then(() => {
+                resolve(chats)
+              })
+              .catch((err:any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+                reject(err)
+              })              
+            } catch (err:any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+              reject(`Error parsing conversation list: ${err}`)
             }
-
-            checkNextConversation()
           })
         }
       })
@@ -269,6 +283,16 @@ export class REXGoogleAISpider extends REXSpider {
                     }
 
                     uploadConversations()
+                  })
+                  .catch((err) => {
+                    this.signalCrawlComplete(-1, [], `Error encountered fetching chats: ${err}`)
+
+                    crawlResult.issues.push({
+                      url: this.loginUrl(),
+                      message: `Error encountered fetching chats: ${err}`
+                    })
+
+                    resolve(crawlResult)
                   })
                 }
               } else {
