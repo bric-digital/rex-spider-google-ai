@@ -121,8 +121,6 @@ export class REXGoogleAISpider extends REXSpider {
           reject(`List fetch failed (status ${response.status}).`)
         } else {
           response.text().then((rawBody) => {
-            console.log(`[rex-spider-google-ai] rawBody: ${rawBody}`)
-
             try {
               const conversations:REXStackOperator<Conversation> = new REXStackOperator<Conversation>()
 
