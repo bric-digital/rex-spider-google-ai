@@ -71,6 +71,19 @@ export class REXGoogleAISpider extends REXSpider {
             for (const message of parsedLine) {
               if (check.array(message)) {
                 for (const chat of message) {
+                  if (check.string(chat[0][0]) === false) {
+                    throw(`Error parsing conversation: chat[0][0] is not a string.`)
+                  }
+
+                  if (check.string(chat[0][1]) === false) {
+                    throw(`Error parsing conversation: chat[0][1] is not a string.`)
+                  }
+
+                  if (check.number(chat[5][0]) === false) {
+                    throw(`Error parsing conversation: chat[5][0] is not a number.`)
+                  }
+
+                  // Put more robust checks - throw error if data isn't right type
                   const conversation:Conversation = {
                     identifier: `${chat[0][0]}_${chat[0][1]}`,
                     turns: [],
@@ -81,6 +94,10 @@ export class REXGoogleAISpider extends REXSpider {
                   }
 
                   if (chat[6] !== null) {
+                    if (check.number(chat[6][0]) === false) {
+                      throw(`Error parsing conversation: chat[6][0] is not a number.`)
+                    }
+
                     conversation.ended = new DateString(chat[6][0])
                   }
 
@@ -100,6 +117,12 @@ export class REXGoogleAISpider extends REXSpider {
       console.error(err)
 
       throw(err)
+    }
+
+    if (parsed.length === 0) {
+      console.error(`[rex-spider-google-ai] Empty account - no conversations.`)
+
+      throw('Empty account - no conversations.')
     }
 
     return parsed
