@@ -38,20 +38,23 @@ export class REXGoogleAISpider extends REXSpider {
 
   checkLogin(): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
-      fetch(this.loginUrl())
-        .then((response: Response) => {
-          if (response.ok) {
-            response.text().then((rawHtml) => {
-              if (rawHtml.includes('aria-label="Sign in"')) {
-                resolve(false)
-              } else {
-                resolve(true)
-              }
-            })
-          } else {
-            resolve(false)
-          }
-        })
+      fetch(this.loginUrl()).then((response: Response) => {
+        if (response.ok) {
+          response.text().then((rawHtml) => {
+            if (rawHtml.includes('aria-label="Sign in"')) {
+              resolve(false)
+            } else {
+              resolve(true)
+            }
+          })
+        } else {
+          resolve(false)
+        }
+      }).catch((err) => {
+        console.log(`[rex-spider-google-ai] Error fetching login page (${this.loginUrl()}): ${err}`)
+
+        resolve(false)
+      })
     })
   }
 
@@ -117,12 +120,6 @@ export class REXGoogleAISpider extends REXSpider {
       console.error(err)
 
       throw(err)
-    }
-
-    if (parsed.length === 0) {
-      console.error(`[rex-spider-google-ai] Empty account - no conversations.`)
-
-      throw('Empty account - no conversations.')
     }
 
     return parsed
@@ -195,8 +192,14 @@ export class REXGoogleAISpider extends REXSpider {
             } catch (err:any) { // eslint-disable-line @typescript-eslint/no-explicit-any
               reject(`Error parsing conversation list: ${err}`)
             }
+          }).catch((err) => {
+            reject(`Unable to retrieve response body from ${chatsUrl}: ${err}`)
           })
         }
+      }).catch((err) => {
+        console.log(`[rex-spider-google-ai] Error requesting ${chatsUrl}: ${err}`)
+
+        reject(`Error requesting ${chatsUrl}: ${err}`)
       })
     })
   }
@@ -279,13 +282,19 @@ export class REXGoogleAISpider extends REXSpider {
                               if (inspectionRecord.refresh) {
                                 this.checkIfAlreadyTransmitted(inspectionRecord.id, inspectionRecord.lookupDate).then((transmitted:boolean) => { // Possibly redundant
                                   if (transmitted === false) {
-                                    dispatchEvent(payload)
+                                    try {
+                                      dispatchEvent(payload)
 
-                                    dispatched += 1
+                                      dispatched += 1
 
-                                    this.logTransmitted(inspectionRecord.id, inspectionRecord.lookupDate).then(() => {
+                                      this.logTransmitted(inspectionRecord.id, inspectionRecord.lookupDate).then(() => {
+                                        uploadConversations()
+                                      })
+                                    } catch (err) {
+                                      console.log(`[rex-spider-google-ai] Unable to transmit conversation: ${err}`)
+
                                       uploadConversations()
-                                    })
+                                    }
                                   } else {
                                     uploadConversations()
                                   }
@@ -296,6 +305,8 @@ export class REXGoogleAISpider extends REXSpider {
                             } else {
                               uploadConversations()
                             }
+                          } else {
+                            uploadConversations()
                           }
                         } else {
                           uploadConversations()
@@ -326,6 +337,15 @@ export class REXGoogleAISpider extends REXSpider {
 
                 resolve(crawlResult)
               }
+            }).catch((err) => {
+              this.signalCrawlComplete(-1, [], `Unable to retrieve respoinse body from ${homeUrl}: ${err}.`)
+
+              crawlResult.issues.push({
+                url: this.loginUrl(),
+                message: `Unable to retrieve respoinse body from ${homeUrl}: ${err}.`
+              })
+
+              resolve(crawlResult)
             })
           }
         })
