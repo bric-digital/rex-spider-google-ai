@@ -47,6 +47,11 @@ export class REXGoogleAISpider extends REXSpider {
               resolve(true)
             }
           })
+          .catch((err) => {
+            console.log(`[rex-spider-google-ai] Error fetching login page text (${this.loginUrl()}): ${err}`)
+
+            resolve(false)
+          })
         } else {
           resolve(false)
         }
