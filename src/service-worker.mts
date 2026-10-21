@@ -157,7 +157,7 @@ export class REXGoogleAISpider extends REXSpider {
           key: 'rex-spider-google-ai-last-sync'
         }
 
-        rexCorePlugin.handleMessage(fetchLastSync, this, (response) => {
+        rexCorePlugin.handleMessage(fetchLastSync, null, (response) => {
           let timestamp = 0
 
           if (response !== null) {
@@ -175,7 +175,7 @@ export class REXGoogleAISpider extends REXSpider {
               value: Date.now()
             }
 
-            rexCorePlugin.handleMessage(storeMessage, this, (response) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+            rexCorePlugin.handleMessage(storeMessage, null, (response) => { // eslint-disable-line @typescript-eslint/no-unused-vars
               this.syncing = true
 
               const homeUrl = 'https://www.google.com/'
