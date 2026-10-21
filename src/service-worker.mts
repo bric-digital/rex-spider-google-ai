@@ -223,7 +223,7 @@ export class REXGoogleAISpider extends REXSpider {
                             } else {
                               const conversation = chatList.pop()
 
-                              if (conversation !== undefined) {
+                              if (conversation !== undefined && conversation.started !== undefined) {
                                 if (conversation.started.value !== null) {
                                   const payload: EventPayload = {
                                     name: 'rex-conversation',
@@ -244,7 +244,7 @@ export class REXGoogleAISpider extends REXSpider {
                                     key: uploadKey
                                   }
 
-                                  rexCorePlugin.handleMessage(fetchLastUpload, this, (uploadValue) => {
+                                  rexCorePlugin.handleMessage(fetchLastUpload, null, (uploadValue) => {
                                     if (uploadValue === null) {
                                       dispatchEvent(payload)
 
@@ -256,7 +256,7 @@ export class REXGoogleAISpider extends REXSpider {
                                         value: Date.now()
                                       }
 
-                                      rexCorePlugin.handleMessage(storeUpload, this, (response) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+                                      rexCorePlugin.handleMessage(storeUpload, null, (response) => { // eslint-disable-line @typescript-eslint/no-unused-vars
                                         uploadConversations()
                                       })
                                     } else {
